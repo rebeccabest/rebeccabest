@@ -1,0 +1,181 @@
+```xml
+<uses-permission android:name="android.permission.CAMERA" />
+<uses-feature android:name="android.hardware.camera.any" />
+```
+```java
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCaptureSession;
+import android.hardware.camera2.CameraDevice;
+import android.hardware.camera2.CameraManager;
+import android.os.Bundle;
+import android.util.Size;
+import android.view.Surface;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
+import android.view.View;
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+
+import java.util.Arrays;
+
+public class CameraActivity extends AppCompatActivity {
+
+    private static final int REQUEST_CAMERA_PERMISSIONS = 100;
+    private static final String[] CAMERA_PERMISSIONS = {
+            Manifest.permission.CAMERA
+    };
+
+    private SurfaceView surfaceView;
+
+    private CameraManager cameraManager;
+    private CameraDevice cameraDevice;
+    private CameraCaptureSession cameraCaptureSession;
+    private Size previewSize;
+
+    private final CameraDevice.StateCallback cameraStateCallback = new CameraDevice.StateCallback() {
+        @Override
+        public void onOpened(@NonNull CameraDevice camera) {
+            cameraDevice = camera;
+            createPreviewSession();
+        }
+
+        @Override
+        public void onDisconnected(@NonNull CameraDevice camera) {
+            camera.close();
+            cameraDevice = null;
+        }
+
+        @Override
+        public void onError(@NonNull CameraDevice camera int error) {
+            camera.close();
+            cameraDevice = null;
+        }
+    };
+
+    private final CameraCaptureSession.StateCallback captureSessionCallback = new CameraCaptureSession.StateCallback() {
+        @Override
+        public void onConfigured(@NonNull CameraCaptureSession session) {
+            cameraCaptureSession = session;
+            try {
+                previewSize = chooseOptimalSize(cameraDevice.getId surfaceView.getWidth surfaceView.getHeight());
+                SurfaceHolder surfaceHolder = surfaceView.getHolder();
+                surfaceHolder.setFixedSize(previewSize.getWidth previewSize.getHeight());
+                surfaceHolder.setSurfaceSize(previewSize.getWidth previewSize.getHeight());
+                Surface previewSurface = surfaceHolder.getSurface();
+                cameraCaptureSession.setRepeatingRequest(createCaptureRequest(previewSurface null null);
+            } catch (CameraAccessException e) {
+                e.printStackTrace();
+            }
+        }
+
+        @Override
+        public void onConfigureFailed(@NonNull CameraCaptureSession session) {
+            // Handle failure
+        }
+    };
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_camera);
+
+        surfaceView = findViewById(R.id.surfaceView);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        requestCameraPermissions();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        closeCamera();
+    }
+
+    private void requestCameraPermissions() {
+        if (ContextCompat.checkSelfPermission(this Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            openCamera();
+        } else {
+            ActivityCompat.requestPermissions(this CAMERA_PERMISSIONS REQUEST_CAMERA_PERMISSIONS);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode @NonNull String[] permissions @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode permissions grantResults);
+        if (requestCode == REQUEST_CAMERA_PERMISSIONS) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                openCamera();
+            } else {
+                // Handle permission denied
+            }
+        }
+    }
+
+    private void openCamera() {
+        cameraManager = (CameraManager) getSystemService(CAMERA_SERVICE);
+        try {
+            if (ActivityCompat.checkSelfPermission(this Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                cameraManager.openCamera(cameraManager.getCameraIdList()[0 cameraStateCallback null);
+            }
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void closeCamera() {
+        if (cameraCaptureSession != null) {
+            cameraCaptureSession.close();
+            cameraCaptureSession = null;
+        }
+        if (cameraDevice != null) {
+            cameraDevice.close();
+            cameraDevice = null;
+        }
+    }
+
+    private void createPreviewSession() throws CameraAccessException {
+        SurfaceHolder surfaceHolder = surfaceView.getHolder();
+        Surface previewSurface = surfaceHolder.getSurface();
+
+        cameraDevice.createCaptureSession(Arrays.asList(previewSurface captureSessionCallback null);
+    }
+
+    private Size chooseOptimalSize(String cameraId int viewWidth int viewHeight) throws CameraAccessException {
+        CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(cameraId);
+        Size[] outputSizes = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+                .getOutputSizes(SurfaceHolder.class);
+
+        int desiredWidth = viewWidth;
+        int desiredHeight = viewHeight;
+
+        // Find the optimal size for the desired width and height
+        for (Size size : outputSizes) {
+            if (desiredWidth <= size.getWidth() && desiredHeight <= size.getHeight()) {
+                return size;
+            }
+        }
+
+        // If no exact match return the largest available size
+        return outputSizes[0];
+    }
+
+    private CaptureRequest createCaptureRequest(Surface previewSurface) throws CameraAccessException {
+        CaptureRequest.Builder requestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+        requestBuilder.addTarget(previewSurface);
+        return requestBuilder.build();
+    }
+}
+```
+```xml
+<SurfaceView
+    android:id="@+id/surfaceView"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent" />
+```
